@@ -476,13 +476,14 @@ async function cargarClima(){
   try{
     const geos=await Promise.all(sitios.map(n=>fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(n)}&count=1&language=es`).then(r=>r.json())));
     const coords=geos.map((g,i)=>({n:sitios[i], la:g.results?.[0]?.latitude, lo:g.results?.[0]?.longitude})).filter(c=>c.la);
-    const datos=await Promise.all(coords.map(c=>fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.la}&longitude=${c.lo}&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max&timezone=auto&forecast_days=7`).then(r=>r.json())));
+    const datos=await Promise.all(coords.map(c=>fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.la}&longitude=${c.lo}&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,sunset&timezone=auto&forecast_days=7`).then(r=>r.json())));
     msg.textContent='Previsión de 7 días · se actualiza con conexión';
     cont.innerHTML=datos.map((d,i)=>`<div class="tarjeta"><h3>${esc(coords[i].n)}</h3><div class="clima-grid">${
       d.daily.time.map((t,j)=>{const f=new Date(t+'T12:00');return `<div class="clima-dia"><div>${f.toLocaleDateString('es-ES',{weekday:'short'})} ${f.getDate()}</div>
         <div class="e">${WMO(d.daily.weather_code[j])}</div>
         <div class="t">${Math.round(d.daily.temperature_2m_max[j])}°<span style="color:var(--gris)">/${Math.round(d.daily.temperature_2m_min[j])}°</span></div>
-        <div style="color:var(--gris)">💨${Math.round(d.daily.wind_speed_10m_max[j])}</div></div>`;}).join('')}</div></div>`).join('');
+        <div style="color:var(--gris)">💨${Math.round(d.daily.wind_speed_10m_max[j])}</div>
+        <div style="color:var(--gris)">🌅${(d.daily.sunset?.[j]||'').slice(11,16)}</div></div>`;}).join('')}</div></div>`).join('');
   }catch(e){ msg.textContent='Sin conexión — la previsión se cargará cuando haya internet.'; }
 }
 
