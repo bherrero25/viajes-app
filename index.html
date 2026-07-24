@@ -155,7 +155,7 @@
     <button data-v="reservas"><span class="ico">🎫</span>Reservas</button>
     <button data-v="gastos"><span class="ico">💶</span>Gastos</button>
     <button data-v="clima"><span class="ico">🌤️</span>Clima</button>
-    <button data-v="info"><span class="ico">ℹ️</span>Info</button>
+    <button data-v="info"><span class="ico">🧭</span>Guía</button>
   </nav>
 </div>
 
@@ -168,7 +168,7 @@ const SB_URL = 'https://thzurasttoyqphepvhlc.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRoenVyYXN0dG95cXBoZXB2aGxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MTgwNzAsImV4cCI6MjA4ODI5NDA3MH0.1-27SeMionuhPMAyX8tJMddTw8tilk4l_AJ41HD7dcI';
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
 const gm = q => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
-const S = { trip:null, acts:[], restos:[], resvs:[], gastos:[], user:null, online:true };
+const S = { trip:null, acts:[], restos:[], resvs:[], gastos:[], lugares:[], guiaCat:'', user:null, online:true };
 
 // ═══════════ utilidades ═══════════
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('ver'); setTimeout(()=>t.classList.remove('ver'),2000); }
@@ -214,22 +214,24 @@ async function arrancar(){
 }
 async function recargar(){
   const id = S.trip.id;
-  const [a,r,v,g] = await Promise.all([
+  const [a,r,v,g,l] = await Promise.all([
     sb.from('viajes_actividades').select('*').eq('viaje_id',id).order('fecha').order('hora',{nullsFirst:false}),
     sb.from('viajes_restaurantes').select('*').eq('viaje_id',id).order('zona').order('nombre'),
     sb.from('viajes_reservas').select('*').eq('viaje_id',id).order('fecha'),
     sb.from('viajes_gastos').select('*').eq('viaje_id',id).order('creado_en',{ascending:false}),
+    sb.from('viajes_lugares').select('*').eq('viaje_id',id).order('categoria').order('nombre'),
   ]);
   if(a.error||r.error||v.error||g.error){ S.online=false; document.getElementById('offline-pill').style.display='inline-block'; cargarCache(); }
   else{
     S.online=true; document.getElementById('offline-pill').style.display='none';
     S.acts=a.data; S.restos=r.data; S.resvs=v.data; S.gastos=g.data;
-    cache('acts',S.acts); cache('restos',S.restos); cache('resvs',S.resvs); cache('gastos',S.gastos);
+    S.lugares = l.error ? [] : l.data;   // la tabla de la guía puede no existir aún
+    cache('acts',S.acts); cache('restos',S.restos); cache('resvs',S.resvs); cache('gastos',S.gastos); cache('lugares',S.lugares);
   }
   renderTodo();
 }
-function cargarCache(){ S.acts=cache('acts')||[]; S.restos=cache('restos')||[]; S.resvs=cache('resvs')||[]; S.gastos=cache('gastos')||[]; }
-function renderTodo(){ renderPlan(); renderComer(); renderReservas(); renderGastos(); renderInfo(); }
+function cargarCache(){ S.acts=cache('acts')||[]; S.restos=cache('restos')||[]; S.resvs=cache('resvs')||[]; S.gastos=cache('gastos')||[]; S.lugares=cache('lugares')||[]; }
+function renderTodo(){ renderPlan(); renderComer(); renderReservas(); renderGastos(); renderGuia(); }
 function estadoViaje(){
   const el=document.getElementById('estado-viaje'); if(!S.trip) return;
   const hoy=new Date(hoyStr()+'T12:00'), ini=new Date(S.trip.fecha_inicio+'T12:00'), fin=new Date(S.trip.fecha_fin+'T12:00');
@@ -487,9 +489,56 @@ async function cargarClima(){
 // ═══════════ INFO ═══════════
 const PREVIO=['Comprar entradas Acrópolis online (etickets.tap.gr) — gratis menores de 26 UE','Reservar: Glafkos (7/8), Barbarossa (9/8), Doukato (11/8)','Descargar mapas offline de Google Maps (Atenas, Paros, Naxos, Santorini)','Tarjeta Sanitaria Europea de los 3','DNI de los chicos a mano (entradas gratis <26)','Check-in online Iberia (M2PGF)','Carné de conducir para el coche'];
 const MALETA=['Protector solar alto','Chanclas de suela dura (Santorini)','Botella de agua reutilizable','Sudadera fina (aire acondicionado de los ferris)','Power bank','Botiquín: ibuprofeno, antidiarreico, crema quemaduras','Bañadores y toalla ligera','Gafas de sol y gorra','Mochila pequeña para excursiones'];
-function renderInfo(){
+const GUIA_CATS = {playa:'🏖️ Playas', plan:'🎯 Planes', super:'🛒 Súpers', practico:'🧰 Práctico'};
+function renderGuia(){
+  const q=(document.getElementById('g-busca')?.value||'').toLowerCase();
+  const lugares=S.lugares.filter(l=>{
+    const blob=(l.nombre+' '+(l.zona||'')+' '+(l.descripcion||'')).toLowerCase();
+    return (!S.guiaCat||l.categoria===S.guiaCat) && (!q||blob.includes(q));
+  });
+  const card = l => `<div class="tarjeta">
+    <h3>${l.destacado?'⭐ ':''}${esc(l.nombre)}</h3>
+    <div class="tags"><span class="tag">${GUIA_CATS[l.categoria]||''}</span><span class="tag">${esc(l.zona||'')}</span></div>
+    ${l.descripcion?`<div class="nota-g" style="margin-top:6px">${esc(l.descripcion)}</div>`:''}
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px">
+      ${l.lugar_maps?`<a class="gm" target="_blank" href="${gm(l.lugar_maps)}">mapa</a>`:'<span></span>'}
+      <button class="btn-mini" onclick="formAlPlan('${l.id}')">➕ al plan</button>
+    </div></div>`;
   document.getElementById('v-info').innerHTML=`
-    <div class="tarjeta"><h3>🆘 Emergencias</h3>
+    <div class="buscador"><input type="text" id="g-busca" value="${esc(q)}" placeholder="🔍 buscar en la guía (playa, Naxos, cajero…)" oninput="renderGuia()"></div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px">
+      <button class="btn-mini" style="${!S.guiaCat?'background:var(--azul);color:#fff':''}" onclick="S.guiaCat='';renderGuia()">todo</button>
+      ${Object.entries(GUIA_CATS).map(([k,v])=>`<button class="btn-mini" style="${S.guiaCat===k?'background:var(--azul);color:#fff':''}" onclick="S.guiaCat='${k}';renderGuia()">${v}</button>`).join('')}
+    </div>
+    ${lugares.length ? lugares.map(card).join('')
+      : (S.lugares.length ? '<div class="nota-g" style="text-align:center; padding:20px">Nada con ese filtro 🤷‍♀️</div>'
+                          : '<div class="aviso-caja">La guía está vacía — ejecuta el script <b>viajes-guia.sql</b> en Supabase para cargarla.</div>')}
+    <div class="seccion-titulo">ℹ️ info del viaje</div>
+    <div class="tarjeta"><details><summary>🆘 Emergencias · 🚌 transporte · 🗣️ griego</summary><div id="info-extra"></div></details></div>
+    <div class="tarjeta"><details><summary>✅ Antes de salir</summary><div id="chk-prev"></div></details></div>
+    <div class="tarjeta"><details><summary>🧳 Maleta</summary><div id="chk-mal"></div></details></div>`;
+  renderInfoExtra();
+  renderCheck('chk-prev', PREVIO, 'vj_chk_prev'); renderCheck('chk-mal', MALETA, 'vj_chk_mal');
+  const b=document.getElementById('g-busca'); if(q){ b.focus(); b.setSelectionRange(b.value.length,b.value.length); }
+}
+function formAlPlan(id){
+  const l=S.lugares.find(x=>x.id===id);
+  abrirModal(`<h3>➕ ${esc(l.nombre)}</h3><p class="nota-g">¿Para qué día lo apunto en el plan?</p>
+    <input type="date" id="f-aldia" value="${hoyStr()>=S.trip.fecha_inicio&&hoyStr()<=S.trip.fecha_fin?hoyStr():S.trip.fecha_inicio}" min="${S.trip.fecha_inicio}" max="${S.trip.fecha_fin}">
+    <label>Hora (opcional)</label><input type="time" id="f-alhora">
+    <div style="display:flex; gap:8px; margin-top:16px">
+      <button class="btn sec" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn" onclick="guardaAlPlan('${id}')">Al plan</button>
+    </div>`);
+}
+async function guardaAlPlan(id){
+  const l=S.lugares.find(x=>x.id===id);
+  const fila={ titulo:l.nombre, fecha:val('f-aldia'), hora:val('f-alhora'), nota:(l.descripcion||'').slice(0,120), lugar_maps:l.lugar_maps, destacada:!!l.destacado };
+  if(!fila.fecha) return toast('Elige el día');
+  if(await guardar('viajes_actividades', fila, null)){ cerrarModal(); toast('Añadido al plan ✓'); }
+}
+function renderInfoExtra(){
+  document.getElementById('info-extra').innerHTML=`
       <div class="fila"><span>Emergencias europeas</span><span class="der"><a class="gm" style="font-size:15px" href="tel:112">112</a></span></div>
       <div class="fila"><span>Policía turística (Grecia)</span><span class="der"><a class="gm" style="font-size:15px" href="tel:171">171</a></span></div>
       <div class="nota-g">Tarjeta Sanitaria Europea · farmacias en todas las capitales de isla</div></div>
@@ -503,9 +552,7 @@ function renderInfo(){
       <div class="fila"><span>Hola / adiós</span><span class="der">Yassas</span></div>
       <div class="fila"><span>Gracias</span><span class="der">Efharistó</span></div>
       <div class="fila"><span>Por favor / de nada</span><span class="der">Parakaló</span></div></div>
-    <div class="tarjeta"><h3>✅ Antes de salir</h3><div id="chk-prev"></div></div>
-    <div class="tarjeta"><h3>🧳 Maleta</h3><div id="chk-mal"></div></div>`;
-  renderCheck('chk-prev', PREVIO, 'vj_chk_prev'); renderCheck('chk-mal', MALETA, 'vj_chk_mal');
+    `;
 }
 function renderCheck(id, items, key){
   const done=JSON.parse(localStorage.getItem(key)||'{}');
