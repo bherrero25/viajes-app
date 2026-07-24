@@ -377,8 +377,13 @@ function renderReservas(){
   const cont=document.getElementById('v-reservas');
   const pend=S.resvs.filter(r=>!r.pagado).reduce((a,b)=>a+(+b.importe||0),0);
   cont.innerHTML = (pend?`<div class="aviso-caja">💳 Pendiente de pagar en destino: <b>${eur(pend)}</b></div>`:'') +
+    `<div style="display:flex; justify-content:flex-end; margin-bottom:8px"><button class="btn-mini" onclick="formResv()">+ añadir reserva</button></div>` +
     S.resvs.map(r=>`<div class="tarjeta">
-      <h3>${TIPO_ICO[r.tipo]||'📌'} ${esc(r.titulo)} ${r.pagado?'<span class="badge pagado">PAGADO</span>':`<span class="badge pendiente">${eur(r.importe)} pendiente</span>`}</h3>
+      <h3>${TIPO_ICO[r.tipo]||'📌'} ${esc(r.titulo)}
+        <button class="icobtn" style="float:right" onclick="formResv('${r.id}')">✏️</button>
+        ${r.pagado?`<span class="badge pagado" style="cursor:pointer" onclick="togglePagado('${r.id}',true)">PAGADO ✓</span>`
+          :`<span class="badge pendiente" style="cursor:pointer" onclick="togglePagado('${r.id}',false)">${eur(r.importe)} pendiente</span>`}</h3>
+      <div class="nota-g" style="margin:0 0 4px; font-size:11.5px">toca la etiqueta para marcar pagado / pendiente</div>
       ${r.fecha?`<div class="fila"><span>${diaLabel(r.fecha)}${r.fecha_fin?' → '+diaLabel(r.fecha_fin):''}</span><span class="der hora">${r.hora?hh(r.hora):''}</span></div>`:''}
       ${r.localizador?`<div class="fila"><span>Localizador</span><span class="der"><span class="loc" onclick="copiar('${esc(r.localizador)}')">${esc(r.localizador)}</span></span></div>`:''}
       ${r.importe!=null?`<div class="fila"><span>Importe</span><span class="der">${eur(r.importe)}</span></div>`:''}
@@ -386,6 +391,33 @@ function renderReservas(){
       ${r.nota?`<div class="nota-g">${esc(r.nota)}</div>`:''}
       ${r.lugar_maps?`<a class="gm" target="_blank" href="${gm(r.lugar_maps)}">Ver en Google Maps</a>`:''}
     </div>`).join('');
+}
+async function togglePagado(id, actual){
+  if(await guardar('viajes_reservas',{pagado:!actual},id)) toast(!actual?'Marcada como PAGADA ✓':'Marcada como pendiente');
+}
+function formResv(id){
+  const r = id ? S.resvs.find(x=>x.id===id) : {};
+  abrirModal(`<h3>${id?'Editar':'Nueva'} reserva</h3>
+    <label>Título</label><input id="f-vtitulo" value="${esc(r.titulo||'')}" placeholder="Hotel, vuelo, entrada…">
+    <label>Tipo</label><select id="f-vtipo">${Object.keys(TIPO_ICO).map(t=>`<option ${r.tipo===t?'selected':''}>${t}</option>`).join('')}</select>
+    <label>Fecha</label><input type="date" id="f-vfecha" value="${r.fecha||''}">
+    <label>Hora (opcional)</label><input type="time" id="f-vhora" value="${r.hora?hh(r.hora):''}">
+    <label>Importe €</label><input type="number" id="f-vimp" inputmode="decimal" value="${r.importe??''}">
+    <label>Localizador (opcional)</label><input id="f-vloc" value="${esc(r.localizador||'')}">
+    <label>Nota (opcional)</label><input id="f-vnota" value="${esc(r.nota||'')}">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px"><input type="checkbox" id="f-vpag" style="width:20px;height:20px" ${r.pagado?'checked':''}> 💳 Ya está pagada</label>
+    <div style="display:flex; gap:8px; margin-top:16px">
+      ${id?`<button class="btn peligro" style="width:auto" onclick="cerrarModal(); borrar('viajes_reservas','${id}','${esc(r.titulo||'').replace(/'/g,'')}')">🗑</button>`:''}
+      <button class="btn sec" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn" onclick="guardaResv('${id||''}')">Guardar</button>
+    </div>`);
+}
+async function guardaResv(id){
+  const imp = document.getElementById('f-vimp').value;
+  const fila={ titulo:val('f-vtitulo'), tipo:val('f-vtipo'), fecha:val('f-vfecha'), hora:val('f-vhora'),
+    importe: imp===''?null:parseFloat(String(imp).replace(',','.')), localizador:val('f-vloc'), nota:val('f-vnota'), pagado:val('f-vpag') };
+  if(!fila.titulo) return toast('Falta el título');
+  if(await guardar('viajes_reservas', fila, id||null)){ cerrarModal(); toast('Guardado ✓'); }
 }
 
 // ═══════════ GASTOS ═══════════
