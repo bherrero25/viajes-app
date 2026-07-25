@@ -458,6 +458,12 @@ function renderGastos(){
     cardPartidas = `<div class="tarjeta"><h3>Estimación en destino</h3>
       <div class="nota-g">Ejecuta el script de partidas en Supabase para ver aquí el previsto vs real por categoría</div></div>`;
   }
+  // desglose de lo fijo por tipo de reserva (vuelos, hoteles, ferris…)
+  const TIPO_NOM={vuelo:'✈️ Vuelos',hotel:'🏨 Alojamiento',ferry:'⛴️ Ferris',coche:'🚗 Coche',traslado:'🚐 Traslados',entrada:'🎟️ Entradas',otro:'📌 Otros'};
+  const porTipo={};
+  S.resvs.forEach(r=>{ const t=r.tipo||'otro'; porTipo[t]=(porTipo[t]||0)+(+r.importe||0); });
+  const desgloseFijo = Object.entries(porTipo).sort((a,b)=>b[1]-a[1])
+    .map(([t,v])=>`<div class="fila"><span>${TIPO_NOM[t]||t}</span><span class="der">${eur(v)}</span></div>`).join('');
   cont.innerHTML = `
     <div class="total-caja">
       <div style="display:flex; justify-content:space-between; align-items:center"><span>Total previsto + gastado</span><b>${eur(total)}</b></div>
@@ -466,8 +472,9 @@ function renderGastos(){
         <span>Objetivo: ${eur(pres)}</span><span>${total<=pres?'quedan '+eur(pres-total):'⚠️ pasados '+eur(total-pres)}</span></div>
     </div>
     <div class="tarjeta">
-      <div class="fila"><span>🎫 Reservas y transportes (fijo)</span><span class="der">${eur(comprometido)}</span></div>
-      <div class="fila"><span>🧾 Gastado en destino (apuntado aquí)</span><span class="der">${eur(gastado)}</span></div>
+      <h3>🎫 Lo fijo (reservas) — ${eur(comprometido)}</h3>
+      ${desgloseFijo}
+      <div class="fila" style="margin-top:4px"><span><b>🧾 Gastado en destino (apuntado aquí)</b></span><span class="der"><b>${eur(gastado)}</b></span></div>
     </div>
     ${cardPartidas}
     <div class="tarjeta">
