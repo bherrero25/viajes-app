@@ -435,6 +435,29 @@ function renderGastos(){
   const total=comprometido+gastado, pres=+S.trip.presupuesto||0;
   const pct=pres?Math.min(100,(total/pres)*100):0;
   const color = total>pres?'var(--aviso)':(total>pres*.9?'var(--amarillo)':'var(--ok)');
+  // presupuesto por partidas (si el viaje lo tiene definido)
+  const pp = S.trip.presupuesto_partidas || null;
+  let cardPartidas = '';
+  if(pp){
+    const porCat = {};
+    S.gastos.forEach(g=>{ porCat[g.categoria]=(porCat[g.categoria]||0)+(+g.importe||0); });
+    const presDest = Object.values(pp).reduce((a,b)=>a+(+b||0),0);
+    cardPartidas = `<div class="tarjeta"><h3>📊 Partidas en destino — previsto vs real</h3>` +
+      Object.entries(pp).map(([cat,bud])=>{
+        const gast = porCat[cat]||0, pcat = bud?Math.min(100,(gast/bud)*100):0;
+        const ccat = gast>bud?'var(--aviso)':(gast>bud*.85?'var(--amarillo)':'var(--ok)');
+        return `<div style="padding:7px 0; border-bottom:1px dashed var(--linea)">
+          <div style="display:flex; justify-content:space-between; font-size:14px">
+            <span>${CATS[cat]||'📦'} ${cat}</span>
+            <span><b>${eur(gast)}</b> de ${eur(bud)} · <span style="color:${ccat}; font-weight:700">${gast<=bud?'quedan '+eur(bud-gast):'⚠️ +'+eur(gast-bud)}</span></span></div>
+          <div class="semaforo" style="margin:4px 0 0"><div style="width:${pcat}%; background:${ccat}"></div></div></div>`;
+      }).join('') +
+      `<div class="fila" style="margin-top:6px"><span><b>Total en destino</b></span><span class="der">${eur(gastado)} de ${eur(presDest)}</span></div>
+       <div class="nota-g">Lo fijo (reservas) va aparte. Apuntad cada gasto con su categoría y aquí sale la desviación de cada partida</div></div>`;
+  } else {
+    cardPartidas = `<div class="tarjeta"><h3>Estimación en destino</h3>
+      <div class="nota-g">Ejecuta el script de partidas en Supabase para ver aquí el previsto vs real por categoría</div></div>`;
+  }
   cont.innerHTML = `
     <div class="total-caja">
       <div style="display:flex; justify-content:space-between; align-items:center"><span>Total previsto + gastado</span><b>${eur(total)}</b></div>
@@ -446,6 +469,7 @@ function renderGastos(){
       <div class="fila"><span>🎫 Reservas y transportes (fijo)</span><span class="der">${eur(comprometido)}</span></div>
       <div class="fila"><span>🧾 Gastado en destino (apuntado aquí)</span><span class="der">${eur(gastado)}</span></div>
     </div>
+    ${cardPartidas}
     <div class="tarjeta">
       <h3>📝 Apuntar gasto</h3>
       <div style="display:flex; gap:8px; margin-bottom:8px">
