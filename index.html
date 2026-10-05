@@ -126,7 +126,7 @@
 <div id="v-app" style="display:none">
   <header>
     <div>
-      <h1 id="h-titulo">Mis Viajes</h1>
+      <h1 id="h-titulo" onclick="selectorViajes()" style="cursor:pointer">Mis Viajes</h1>
       <div class="sub" id="h-sub"></div>
       <span id="estado-viaje"></span> <span class="offline-pill" id="offline-pill">📴 sin conexión — datos guardados</span>
     </div>
@@ -209,12 +209,34 @@ async function arrancar(){
     return toast('Error cargando viajes: '+error.message);
   }
   if(!trips?.length) return toast('No hay viajes todavía — carga los datos con el script SQL');
-  S.trip = trips[0]; cache('trip', S.trip);
-  document.getElementById('h-titulo').textContent = S.trip.emoji+' '+S.trip.nombre;
+  S.trips = trips;
+  const sel = localStorage.getItem('vj_trip_sel');
+  S.trip = trips.find(t=>t.id===sel) || trips[0];
+  await aplicarViaje();
+}
+async function aplicarViaje(){
+  cache('trip', S.trip);
+  document.getElementById('h-titulo').textContent = S.trip.emoji+' '+S.trip.nombre + (S.trips?.length>1 ? ' ▾' : '');
   document.getElementById('h-sub').textContent = S.trip.destino||'';
   estadoViaje();
   await recargar();
   cargarClima();
+}
+function selectorViajes(){
+  if(!S.trips || S.trips.length<2) return;
+  abrirModal(`<h3>🧳 Mis viajes</h3>` + S.trips.map(t=>{
+    const activo = t.id===S.trip.id;
+    return `<button class="btn ${activo?'':'sec'}" style="margin-top:8px; text-align:left" onclick="elegirViaje('${t.id}')">
+      ${t.emoji||'✈️'} ${esc(t.nombre)} <span style="font-weight:400; font-size:12.5px; opacity:.8">· ${t.fecha_inicio?new Date(t.fecha_inicio+'T12:00').toLocaleDateString('es-ES',{month:'short',year:'numeric'}):''}${activo?' · actual':''}</span>
+    </button>`;
+  }).join('') + `<div style="margin-top:14px"><button class="btn sec" onclick="cerrarModal()">Cerrar</button></div>`);
+}
+async function elegirViaje(id){
+  localStorage.setItem('vj_trip_sel', id);
+  S.trip = S.trips.find(t=>t.id===id) || S.trip;
+  cerrarModal();
+  await aplicarViaje();
+  toast(S.trip.emoji+' '+S.trip.nombre);
 }
 async function recargar(){
   const id = S.trip.id;
@@ -230,11 +252,11 @@ async function recargar(){
     S.online=true; document.getElementById('offline-pill').style.display='none';
     S.acts=a.data; S.restos=r.data; S.resvs=v.data; S.gastos=g.data;
     S.lugares = l.error ? [] : l.data;   // la tabla de la guía puede no existir aún
-    cache('acts',S.acts); cache('restos',S.restos); cache('resvs',S.resvs); cache('gastos',S.gastos); cache('lugares',S.lugares);
+    cache('acts_'+id,S.acts); cache('restos_'+id,S.restos); cache('resvs_'+id,S.resvs); cache('gastos_'+id,S.gastos); cache('lugares_'+id,S.lugares);
   }
   renderTodo();
 }
-function cargarCache(){ S.acts=cache('acts')||[]; S.restos=cache('restos')||[]; S.resvs=cache('resvs')||[]; S.gastos=cache('gastos')||[]; S.lugares=cache('lugares')||[]; }
+function cargarCache(){ const id=S.trip?.id||''; S.acts=cache('acts_'+id)||cache('acts')||[]; S.restos=cache('restos_'+id)||cache('restos')||[]; S.resvs=cache('resvs_'+id)||cache('resvs')||[]; S.gastos=cache('gastos_'+id)||cache('gastos')||[]; S.lugares=cache('lugares_'+id)||cache('lugares')||[]; }
 function renderTodo(){ renderPlan(); renderComer(); renderReservas(); renderGastos(); renderGuia(); }
 function estadoViaje(){
   const el=document.getElementById('estado-viaje'); if(!S.trip) return;
